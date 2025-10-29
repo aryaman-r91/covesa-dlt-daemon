@@ -828,6 +828,8 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
     int num;
     uint32_t type_info = 0, type_info_tmp = 0;
     int text_offset = 0;
+    size_t pos = 0;  /* Track current position to avoid repeated strlen calls */
+    int written;
 
     PRINT_FUNCTION_VERBOSE(verbose);
 
@@ -878,17 +880,28 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
 
         /* process message id / service id */
         if (DLT_MSG_IS_CONTROL(msg)) {
-            if ((id > 0) && (id < DLT_SERVICE_ID_LAST_ENTRY))
-                snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            if ((id > 0) && (id < DLT_SERVICE_ID_LAST_ENTRY)) {
+                written = snprintf(text + pos, textlength - pos, "%s",
                          service_id_name[id]); /* service id */
-            else if (!(DLT_MSG_IS_CONTROL_TIME(msg)))
-                snprintf(text + strlen(text), textlength - strlen(text), "service(%u)", id); /* service id */
+                if (written > 0)
+                    pos += (size_t)written;
+            }
+            else if (!(DLT_MSG_IS_CONTROL_TIME(msg))) {
+                written = snprintf(text + pos, textlength - pos, "service(%u)", id); /* service id */
+                if (written > 0)
+                    pos += (size_t)written;
+            }
 
-            if (datalength > 0)
-                snprintf(text + strlen(text), textlength - strlen(text), ", ");
+            if (datalength > 0) {
+                written = snprintf(text + pos, textlength - pos, ", ");
+                if (written > 0)
+                    pos += (size_t)written;
+            }
         }
         else {
-            snprintf(text + strlen(text), textlength - strlen(text), "%u, ", id); /* message id */
+            written = snprintf(text + pos, textlength - pos, "%u, ", id); /* message id */
+            if (written > 0)
+                pos += (size_t)written;
         }
 
         /* process return value */
@@ -896,30 +909,44 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
             if (datalength > 0) {
                 DLT_MSG_READ_VALUE(retval, ptr, datalength, uint8_t); /* No endian conversion necessary */
 
-                if ((retval < DLT_SERVICE_RESPONSE_LAST) || (retval == 8))
-                    snprintf(text + strlen(text), textlength - strlen(text), "%s", return_type[retval]);
-                else
-                    snprintf(text + strlen(text), textlength - strlen(text), "%.2x", retval);
+                if ((retval < DLT_SERVICE_RESPONSE_LAST) || (retval == 8)) {
+                    written = snprintf(text + pos, textlength - pos, "%s", return_type[retval]);
+                    if (written > 0)
+                        pos += (size_t)written;
+                }
+                else {
+                    written = snprintf(text + pos, textlength - pos, "%.2x", retval);
+                    if (written > 0)
+                        pos += (size_t)written;
+                }
 
-                if (datalength >= 1)
-                    snprintf(text + strlen(text), textlength - strlen(text), ", ");
+                if (datalength >= 1) {
+                    written = snprintf(text + pos, textlength - pos, ", ");
+                    if (written > 0)
+                        pos += (size_t)written;
+                }
             }
         }
 
         if (type == DLT_OUTPUT_ASCII_LIMITED) {
-            ret = dlt_print_hex_string(text + strlen(text),
-                                       (int)(textlength - strlen(
-                                                 text)),
+            ret = dlt_print_hex_string(text + pos,
+                                       (int)(textlength - pos),
                                        ptr,
                                        (datalength >
                                         DLT_COMMON_ASCII_LIMIT_MAX_CHARS ? DLT_COMMON_ASCII_LIMIT_MAX_CHARS : datalength));
 
+            if (ret > 0)
+                pos += (size_t)ret;
+
             if ((datalength > DLT_COMMON_ASCII_LIMIT_MAX_CHARS) &&
-                ((textlength - strlen(text)) > 4))
-                snprintf(text + strlen(text), textlength - strlen(text), " ...");
+                ((textlength - pos) > 4)) {
+                written = snprintf(text + pos, textlength - pos, " ...");
+                if (written > 0)
+                    pos += (size_t)written;
+            }
         }
         else {
-            ret = dlt_print_hex_string(text + strlen(text), (int)(textlength - strlen(text)), ptr, datalength);
+            ret = dlt_print_hex_string(text + pos, (int)(textlength - pos), ptr, datalength);
         }
 
         return ret;
@@ -933,8 +960,10 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
 
     for (num = 0; num < (int)(msg->extendedheader->noar); num++) {
         if (num != 0) {
-            text_offset = (int)strlen(text);
-            snprintf(text + text_offset, textlength - (size_t)text_offset, " ");
+            text_offset = (int)pos;
+            written = snprintf(text + text_offset, textlength - (size_t)text_offset, " ");
+            if (written > 0)
+                pos += (size_t)written;
         }
 
         /* first read the type info of the argument */
@@ -942,12 +971,15 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
         type_info = DLT_ENDIAN_GET_32(msg->standardheader->htyp, type_info_tmp);
 
         /* print out argument */
-        text_offset = (int)strlen(text);
+        text_offset = (int)pos;
 
         if (dlt_message_argument_print(msg, type_info, pptr, pdatalength,
                                        (text + text_offset), (textlength - (size_t)text_offset), -1,
                                        0) == DLT_RETURN_ERROR)
             return DLT_RETURN_ERROR;
+        
+        /* Update position after argument print */
+        pos = (size_t)strlen(text);
     }
 
     return DLT_RETURN_OK;
