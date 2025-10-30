@@ -2109,6 +2109,7 @@ DltReturnValue dlt_receiver_init(DltReceiver *receiver, int fd, DltReceiverType 
         receiver->totalBytesRcvd = 0;
         receiver->buf = NULL;
         receiver->backup_buf = NULL;
+        receiver->backup_buf_size = 0;
         receiver->buffer = (char *)calloc(1, (size_t)buffersize);
         receiver->buffersize = (uint32_t)buffersize;
     }
@@ -2147,6 +2148,7 @@ DltReturnValue dlt_receiver_init_global_buffer(DltReceiver *receiver, int fd, Dl
     receiver->type = type;
     receiver->buffer = *buffer;
     receiver->backup_buf = NULL;
+    receiver->backup_buf_size = 0;
     receiver->buf = receiver->buffer;
 
     return DLT_RETURN_OK;
@@ -2202,8 +2204,12 @@ int dlt_receiver_receive(DltReceiver *receiver)
 
     if ((receiver->lastBytesRcvd) && (receiver->backup_buf != NULL)) {
         memcpy(receiver->buf, receiver->backup_buf, (size_t)receiver->lastBytesRcvd);
-        free(receiver->backup_buf);
-        receiver->backup_buf = NULL;
+        /* Optimization: Don't free backup_buf here. Keep it allocated for reuse.
+         * The backup_buf_size tracks the allocated size, allowing
+         * dlt_receiver_move_to_begin() to reuse the buffer in future calls.
+         * This eliminates malloc/free overhead in the hot path.
+         * The buffer is only freed in dlt_receiver_free() or when resizing.
+         */
     }
 
     if (receiver->type == DLT_RECEIVE_SOCKET)
@@ -2269,14 +2275,35 @@ DltReturnValue dlt_receiver_move_to_begin(DltReceiver *receiver)
         return DLT_RETURN_ERROR;
 
     if ((receiver->buffer != receiver->buf) && (receiver->bytesRcvd != 0)) {
-        receiver->backup_buf = calloc((size_t)(receiver->bytesRcvd + 1), sizeof(char));
-
-        if (receiver->backup_buf == NULL)
-            dlt_vlog(LOG_WARNING,
-                     "Can't allocate memory for backup buf, there will be atleast"
-                     "one corrupted message for fd[%d] \n", receiver->fd);
-        else
+        int32_t bytes_needed = receiver->bytesRcvd + 1;
+        
+        /* Optimization: Reuse backup buffer if it's large enough.
+         * This avoids repeated malloc/free calls in the message processing hot path.
+         * Only reallocate if we need a larger buffer.
+         */
+        if (receiver->backup_buf_size < bytes_needed) {
+            /* Need to allocate or reallocate */
+            if (receiver->backup_buf != NULL) {
+                free(receiver->backup_buf);
+            }
+            
+            receiver->backup_buf = calloc((size_t)bytes_needed, sizeof(char));
+            
+            if (receiver->backup_buf == NULL) {
+                dlt_vlog(LOG_WARNING,
+                         "Can't allocate memory for backup buf, there will be at least "
+                         "one corrupted message for fd[%d]\n", receiver->fd);
+                receiver->backup_buf_size = 0;
+            }
+            else {
+                receiver->backup_buf_size = bytes_needed;
+            }
+        }
+        
+        /* Copy data to backup buffer (reused or newly allocated) */
+        if (receiver->backup_buf != NULL) {
             memcpy(receiver->backup_buf, receiver->buf, (size_t)receiver->bytesRcvd);
+        }
     }
 
     return DLT_RETURN_OK;

@@ -780,6 +780,7 @@ typedef struct
     char *buffer;         /**< pointer to receiver buffer */
     char *buf;            /**< pointer to position within receiver buffer */
     char *backup_buf;     /** pointer to the buffer with partial messages if any **/
+    int32_t backup_buf_size;  /**< size of allocated backup buffer (for reuse) */
     int fd;               /**< connection handle */
     DltReceiverType type;     /**< type of connection handle */
     int32_t buffersize;       /**< size of receiver buffer */
