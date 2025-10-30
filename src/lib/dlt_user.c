@@ -1824,11 +1824,11 @@ DltReturnValue dlt_user_log_write_start_internal(DltContext *handle,
     int ret = DLT_RETURN_TRUE;
 
     /* check nullpointer */
-    if ((handle == NULL) || (log == NULL))
+    if (DLT_UNLIKELY((handle == NULL) || (log == NULL)))
         return DLT_RETURN_WRONG_PARAMETER;
 
     /* forbid dlt usage in child after fork */
-    if (g_dlt_is_child)
+    if (DLT_UNLIKELY(g_dlt_is_child))
         return DLT_RETURN_ERROR;
 
     /* check log levels */
@@ -1842,7 +1842,7 @@ DltReturnValue dlt_user_log_write_start_internal(DltContext *handle,
     }
 
     ret = dlt_user_log_write_start_init(handle, log, loglevel, is_verbose);
-    if (ret == DLT_RETURN_TRUE) {
+    if (DLT_LIKELY(ret == DLT_RETURN_TRUE)) {
         /* initialize values */
         if ((NULL != log->buffer))
         {
@@ -1854,7 +1854,7 @@ DltReturnValue dlt_user_log_write_start_internal(DltContext *handle,
             log->buffer = calloc(sizeof(unsigned char), dlt_user.log_buf_len);
         }
 
-        if (log->buffer == NULL) {
+        if (DLT_UNLIKELY(log->buffer == NULL)) {
             dlt_vlog(LOG_ERR, "Cannot allocate buffer for DLT Log message\n");
             return DLT_RETURN_ERROR;
         }
@@ -1862,7 +1862,7 @@ DltReturnValue dlt_user_log_write_start_internal(DltContext *handle,
         {
             /* In non-verbose mode, insert message id */
             if (!is_verbose_mode(dlt_user.verbose_mode, log)) {
-                if ((sizeof(uint32_t)) > dlt_user.log_buf_len)
+                if (DLT_UNLIKELY((sizeof(uint32_t)) > dlt_user.log_buf_len))
                     return DLT_RETURN_USER_BUFFER_FULL;
 
                 /* Write message id */
@@ -1888,19 +1888,19 @@ DltReturnValue dlt_user_log_write_start_w_given_buffer(DltContext *handle,
     int ret = DLT_RETURN_TRUE;
 
     /* check nullpointer */
-    if ((handle == NULL) || (log == NULL) || (buffer == NULL))
+    if (DLT_UNLIKELY((handle == NULL) || (log == NULL) || (buffer == NULL)))
         return DLT_RETURN_WRONG_PARAMETER;
 
     /* discard unexpected parameters */
-    if ((size <= 0) || (size > dlt_user.log_buf_len) || (args_num <= 0))
+    if (DLT_UNLIKELY((size <= 0) || (size > dlt_user.log_buf_len) || (args_num <= 0)))
         return DLT_RETURN_WRONG_PARAMETER;
 
     /* forbid dlt usage in child after fork */
-    if (g_dlt_is_child)
+    if (DLT_UNLIKELY(g_dlt_is_child))
         return DLT_RETURN_ERROR;
 
     /* discard non-verbose mode */
-    if (dlt_user.verbose_mode == 0)
+    if (DLT_UNLIKELY(dlt_user.verbose_mode == 0))
         return DLT_RETURN_ERROR;
 
     ret = dlt_user_log_write_start_init(handle, log, loglevel, true);
@@ -1917,7 +1917,7 @@ DltReturnValue dlt_user_log_write_finish(DltContextData *log)
 {
     int ret = DLT_RETURN_ERROR;
 
-    if (log == NULL)
+    if (DLT_UNLIKELY(log == NULL))
         return DLT_RETURN_WRONG_PARAMETER;
 
     ret = dlt_user_log_send_log(log, DLT_TYPE_LOG);
@@ -1931,7 +1931,7 @@ DltReturnValue dlt_user_log_write_finish_w_given_buffer(DltContextData *log)
 {
     int ret = DLT_RETURN_ERROR;
 
-    if (log == NULL)
+    if (DLT_UNLIKELY(log == NULL))
         return DLT_RETURN_WRONG_PARAMETER;
 
     ret = dlt_user_log_send_log(log, DLT_TYPE_LOG);
@@ -1942,16 +1942,16 @@ DltReturnValue dlt_user_log_write_finish_w_given_buffer(DltContextData *log)
 static DltReturnValue dlt_user_log_write_raw_internal(DltContextData *log, const void *data, uint16_t length, DltFormatType type, const char *name, bool with_var_info)
 {
     /* check nullpointer */
-    if ((log == NULL) || ((data == NULL) && (length != 0)))
+    if (DLT_UNLIKELY((log == NULL) || ((data == NULL) && (length != 0))))
         return DLT_RETURN_WRONG_PARAMETER;
 
     /* Have to cast type to signed type because some compilers assume that DltFormatType is unsigned and issue a warning */
-    if (((int16_t)type < DLT_FORMAT_DEFAULT) || (type >= DLT_FORMAT_MAX)) {
+    if (DLT_UNLIKELY(((int16_t)type < DLT_FORMAT_DEFAULT) || (type >= DLT_FORMAT_MAX))) {
         dlt_vlog(LOG_ERR, "Format type %u is outside valid range", type);
         return DLT_RETURN_WRONG_PARAMETER;
     }
 
-    if (!DLT_USER_INITALIZED) {
+    if (DLT_UNLIKELY(!DLT_USER_INITALIZED)) {
         dlt_vlog(LOG_WARNING, "%s dlt_user_init_state != INIT_DONE\n", __FUNCTION__);
         return DLT_RETURN_ERROR;
     }
@@ -1959,7 +1959,7 @@ static DltReturnValue dlt_user_log_write_raw_internal(DltContextData *log, const
     const uint16_t name_size = (name != NULL) ? strlen(name)+1 : 0;
 
     size_t needed_size = length + sizeof(uint16_t);
-    if ((log->size + needed_size) > dlt_user.log_buf_len)
+    if (DLT_UNLIKELY((log->size + needed_size) > dlt_user.log_buf_len))
         return DLT_RETURN_USER_BUFFER_FULL;
 
     if (is_verbose_mode(dlt_user.verbose_mode, log)) {
@@ -1972,7 +1972,7 @@ static DltReturnValue dlt_user_log_write_raw_internal(DltContextData *log, const
 
             type_info |= DLT_TYPE_INFO_VARI;
         }
-        if ((log->size + needed_size) > dlt_user.log_buf_len)
+        if (DLT_UNLIKELY((log->size + needed_size) > dlt_user.log_buf_len))
             return DLT_RETURN_USER_BUFFER_FULL;
 
         // Genivi extension: put formatting hints into the unused (for RAWD) TYLE + SCOD fields.
@@ -2042,16 +2042,16 @@ DltReturnValue dlt_user_log_write_raw_formatted_attr(DltContextData *log, const 
 // Generic implementation for all "simple" types, possibly with attributes
 static DltReturnValue dlt_user_log_write_generic_attr(DltContextData *log, const void *datap, size_t datalen, uint32_t type_info, const VarInfo *varinfo)
 {
-    if (log == NULL)
+    if (DLT_UNLIKELY(log == NULL))
         return DLT_RETURN_WRONG_PARAMETER;
 
-    if (!DLT_USER_INITALIZED) {
+    if (DLT_UNLIKELY(!DLT_USER_INITALIZED)) {
         dlt_vlog(LOG_WARNING, "%s dlt_user_init_state != INIT_DONE\n", __FUNCTION__);
         return DLT_RETURN_ERROR;
     }
 
     size_t needed_size = datalen;
-    if ((log->size + needed_size) > dlt_user.log_buf_len)
+    if (DLT_UNLIKELY((log->size + needed_size) > dlt_user.log_buf_len))
         return DLT_RETURN_USER_BUFFER_FULL;
 
     if (is_verbose_mode(dlt_user.verbose_mode, log)) {
@@ -2074,7 +2074,7 @@ static DltReturnValue dlt_user_log_write_generic_attr(DltContextData *log, const
 
             type_info |= DLT_TYPE_INFO_VARI;
         }
-        if ((log->size + needed_size) > dlt_user.log_buf_len)
+        if (DLT_UNLIKELY((log->size + needed_size) > dlt_user.log_buf_len))
             return DLT_RETURN_USER_BUFFER_FULL;
 
         memcpy(log->buffer + log->size, &type_info, sizeof(uint32_t));
@@ -2773,7 +2773,7 @@ static DltReturnValue dlt_user_log_write_sized_string_utils_attr(DltContextData 
 
 static DltReturnValue dlt_user_log_write_string_utils_attr(DltContextData *log, const char *text, const enum StringType type, const char *name, bool with_var_info)
 {
-    if ((log == NULL) || (text == NULL))
+    if (DLT_UNLIKELY((log == NULL) || (text == NULL)))
         return DLT_RETURN_WRONG_PARAMETER;
 
     size_t length = strlen(text);
