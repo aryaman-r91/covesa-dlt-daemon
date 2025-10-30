@@ -30,6 +30,7 @@
 #include <ctype.h>
 #include <stdio.h>      /* for printf() and fprintf() */
 #include <sys/socket.h> /* for socket(), connect(), (), and recv() */
+#include <sys/uio.h>    /* for writev() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
 #include <stdlib.h>     /* for atoi() and exit() */
 #include <string.h>     /* for memset() */
@@ -173,33 +174,78 @@ int dlt_daemon_socket_send(int sock,
                            int size2,
                            char serialheader)
 {
-    int ret = DLT_RETURN_OK;
+    /* Use writev() to send all parts in a single system call
+     * This reduces system call overhead compared to multiple send() calls
+     * Performance optimization: combines up to 3 separate sends into one
+     */
+    struct iovec iov[3];
+    int iov_count = 0;
+    ssize_t total_size = 0;
 
-    /* Optional: Send serial header, if requested */
+    /* Build iovec array with non-null parts */
     if (serialheader) {
-        ret = dlt_daemon_socket_sendreliable(sock,
-                                             (void *)dltSerialHeader,
-                                             sizeof(dltSerialHeader));
-
-        if (ret != DLT_RETURN_OK) {
-            return ret;
-        }
+        iov[iov_count].iov_base = (void *)dltSerialHeader;
+        iov[iov_count].iov_len = sizeof(dltSerialHeader);
+        total_size += sizeof(dltSerialHeader);
+        iov_count++;
     }
 
-    /* Send data */
     if ((data1 != NULL) && (size1 > 0)) {
-        ret = dlt_daemon_socket_sendreliable(sock, data1, size1);
-
-        if (ret != DLT_RETURN_OK) {
-            return ret;
-        }
+        iov[iov_count].iov_base = data1;
+        iov[iov_count].iov_len = (size_t)size1;
+        total_size += size1;
+        iov_count++;
     }
 
     if ((data2 != NULL) && (size2 > 0)) {
-        ret = dlt_daemon_socket_sendreliable(sock, data2, size2);
+        iov[iov_count].iov_base = data2;
+        iov[iov_count].iov_len = (size_t)size2;
+        total_size += size2;
+        iov_count++;
     }
 
-    return ret;
+    /* Nothing to send */
+    if (iov_count == 0) {
+        return DLT_RETURN_OK;
+    }
+
+    /* Send all parts using writev() - single system call */
+    ssize_t bytes_sent = 0;
+    while (bytes_sent < total_size) {
+        ssize_t ret = writev(sock, iov, iov_count);
+
+        if (ret < 0) {
+            dlt_vlog(LOG_WARNING,
+                     "%s: socket send failed [errno: %d]!\n", __func__, errno);
+#ifdef DLT_SYSTEMD_WATCHDOG_ENABLE
+            /* notify systemd here that we are still alive */
+            if (sd_notify(0, "WATCHDOG=1") < 0)
+                dlt_vlog(LOG_WARNING, "%s: Could not reset systemd watchdog\n", __func__);
+#endif
+            return DLT_DAEMON_ERROR_SEND_FAILED;
+        }
+
+        bytes_sent += ret;
+
+        /* Handle partial writes by adjusting iovec */
+        if (bytes_sent < total_size) {
+            ssize_t remaining = ret;
+            for (int i = 0; i < iov_count; i++) {
+                if (remaining >= (ssize_t)iov[i].iov_len) {
+                    /* This buffer was fully sent */
+                    remaining -= iov[i].iov_len;
+                    iov[i].iov_len = 0;
+                } else {
+                    /* Partial send of this buffer */
+                    iov[i].iov_base = (char *)iov[i].iov_base + remaining;
+                    iov[i].iov_len -= remaining;
+                    break;
+                }
+            }
+        }
+    }
+
+    return DLT_RETURN_OK;
 }
 
 int dlt_daemon_socket_get_send_qeue_max_size(int sock)
