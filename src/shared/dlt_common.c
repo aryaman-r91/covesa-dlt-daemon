@@ -687,6 +687,8 @@ DltReturnValue dlt_message_header_flags(DltMessage *msg, char *text, size_t text
 {
     struct tm timeinfo;
     char buffer [DLT_COMMON_BUFFER_LENGTH];
+    size_t pos = 0;  /* Track current position in text buffer to avoid repeated strlen() calls */
+    int written;
 
     PRINT_FUNCTION_VERBOSE(verbose);
 
@@ -707,105 +709,166 @@ DltReturnValue dlt_message_header_flags(DltMessage *msg, char *text, size_t text
         tzset();
         localtime_r(&tt, &timeinfo);
         strftime (buffer, sizeof(buffer), "%Y/%m/%d %H:%M:%S", &timeinfo);
-        snprintf(text, textlength, "%s.%.6d ", buffer, msg->storageheader->microseconds);
+        written = snprintf(text, textlength, "%s.%.6d ", buffer, msg->storageheader->microseconds);
+        if (written > 0)
+            pos += (size_t)written;
     }
 
     if ((flags & DLT_HEADER_SHOW_TMSTP) == DLT_HEADER_SHOW_TMSTP) {
         /* print timestamp if available */
         if (DLT_IS_HTYP_WTMS(msg->standardheader->htyp))
-            snprintf(text + strlen(text), textlength - strlen(text), "%10u ", msg->headerextra.tmsp);
+            written = snprintf(text + pos, textlength - pos, "%10u ", msg->headerextra.tmsp);
         else
-            snprintf(text + strlen(text), textlength - strlen(text), "---------- ");
+            written = snprintf(text + pos, textlength - pos, "---------- ");
+        if (written > 0)
+            pos += (size_t)written;
     }
 
-    if ((flags & DLT_HEADER_SHOW_MSGCNT) == DLT_HEADER_SHOW_MSGCNT)
+    if ((flags & DLT_HEADER_SHOW_MSGCNT) == DLT_HEADER_SHOW_MSGCNT) {
         /* print message counter */
-        snprintf(text + strlen(text), textlength - strlen(text), "%.3d ", msg->standardheader->mcnt);
+        written = snprintf(text + pos, textlength - pos, "%.3d ", msg->standardheader->mcnt);
+        if (written > 0)
+            pos += (size_t)written;
+    }
 
     if ((flags & DLT_HEADER_SHOW_ECUID) == DLT_HEADER_SHOW_ECUID) {
         /* print ecu id, use header extra if available, else storage header value */
         if (DLT_IS_HTYP_WEID(msg->standardheader->htyp))
-            dlt_print_id(text + strlen(text), msg->headerextra.ecu);
+            dlt_print_id(text + pos, msg->headerextra.ecu);
         else
-            dlt_print_id(text + strlen(text), msg->storageheader->ecu);
+            dlt_print_id(text + pos, msg->storageheader->ecu);
+        pos += DLT_ID_SIZE;
     }
 
     /* print app id and context id if extended header available, else '----' */ #
 
     if ((flags & DLT_HEADER_SHOW_APID) == DLT_HEADER_SHOW_APID) {
-        snprintf(text + strlen(text), textlength - strlen(text), " ");
+        written = snprintf(text + pos, textlength - pos, " ");
+        if (written > 0)
+            pos += (size_t)written;
 
-        if ((DLT_IS_HTYP_UEH(msg->standardheader->htyp)) && (msg->extendedheader->apid[0] != 0))
-            dlt_print_id(text + strlen(text), msg->extendedheader->apid);
-        else
-            snprintf(text + strlen(text), textlength - strlen(text), "----");
+        if ((DLT_IS_HTYP_UEH(msg->standardheader->htyp)) && (msg->extendedheader->apid[0] != 0)) {
+            dlt_print_id(text + pos, msg->extendedheader->apid);
+            pos += DLT_ID_SIZE;
+        }
+        else {
+            written = snprintf(text + pos, textlength - pos, "----");
+            if (written > 0)
+                pos += (size_t)written;
+        }
 
-        snprintf(text + strlen(text), textlength - strlen(text), " ");
+        written = snprintf(text + pos, textlength - pos, " ");
+        if (written > 0)
+            pos += (size_t)written;
     }
 
     if ((flags & DLT_HEADER_SHOW_CTID) == DLT_HEADER_SHOW_CTID) {
-        if ((DLT_IS_HTYP_UEH(msg->standardheader->htyp)) && (msg->extendedheader->ctid[0] != 0))
-            dlt_print_id(text + strlen(text), msg->extendedheader->ctid);
-        else
-            snprintf(text + strlen(text), textlength - strlen(text), "----");
+        if ((DLT_IS_HTYP_UEH(msg->standardheader->htyp)) && (msg->extendedheader->ctid[0] != 0)) {
+            dlt_print_id(text + pos, msg->extendedheader->ctid);
+            pos += DLT_ID_SIZE;
+        }
+        else {
+            written = snprintf(text + pos, textlength - pos, "----");
+            if (written > 0)
+                pos += (size_t)written;
+        }
 
-        snprintf(text + strlen(text), textlength - strlen(text), " ");
+        written = snprintf(text + pos, textlength - pos, " ");
+        if (written > 0)
+            pos += (size_t)written;
     }
 
     /* print info about message type and length */
     if (DLT_IS_HTYP_UEH(msg->standardheader->htyp)) {
         if ((flags & DLT_HEADER_SHOW_MSGTYPE) == DLT_HEADER_SHOW_MSGTYPE) {
-            snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            written = snprintf(text + pos, textlength - pos, "%s",
                      message_type[DLT_GET_MSIN_MSTP(msg->extendedheader->msin)]);
-            snprintf(text + strlen(text), textlength - strlen(text), " ");
+            if (written > 0)
+                pos += (size_t)written;
+            written = snprintf(text + pos, textlength - pos, " ");
+            if (written > 0)
+                pos += (size_t)written;
         }
 
         if ((flags & DLT_HEADER_SHOW_MSGSUBTYPE) == DLT_HEADER_SHOW_MSGSUBTYPE) {
-            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_LOG)
-                snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_LOG) {
+                written = snprintf(text + pos, textlength - pos, "%s",
                          log_info[DLT_GET_MSIN_MTIN(msg->extendedheader->msin)]);
+                if (written > 0)
+                    pos += (size_t)written;
+            }
 
-            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_APP_TRACE)
-                snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_APP_TRACE) {
+                written = snprintf(text + pos, textlength - pos, "%s",
                          trace_type[DLT_GET_MSIN_MTIN(msg->extendedheader->msin)]);
+                if (written > 0)
+                    pos += (size_t)written;
+            }
 
-            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_NW_TRACE)
-                snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_NW_TRACE) {
+                written = snprintf(text + pos, textlength - pos, "%s",
                          nw_trace_type[DLT_GET_MSIN_MTIN(msg->extendedheader->msin)]);
+                if (written > 0)
+                    pos += (size_t)written;
+            }
 
-            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_CONTROL)
-                snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            if ((DLT_GET_MSIN_MSTP(msg->extendedheader->msin)) == DLT_TYPE_CONTROL) {
+                written = snprintf(text + pos, textlength - pos, "%s",
                          control_type[DLT_GET_MSIN_MTIN(msg->extendedheader->msin)]);
+                if (written > 0)
+                    pos += (size_t)written;
+            }
 
-            snprintf(text + strlen(text), textlength - strlen(text), " ");
+            written = snprintf(text + pos, textlength - pos, " ");
+            if (written > 0)
+                pos += (size_t)written;
         }
 
         if ((flags & DLT_HEADER_SHOW_VNVSTATUS) == DLT_HEADER_SHOW_VNVSTATUS) {
             /* print verbose status pf message */
             if (DLT_IS_MSIN_VERB(msg->extendedheader->msin))
-                snprintf(text + strlen(text), textlength - strlen(text), "V");
+                written = snprintf(text + pos, textlength - pos, "V");
             else
-                snprintf(text + strlen(text), textlength - strlen(text), "N");
+                written = snprintf(text + pos, textlength - pos, "N");
+            if (written > 0)
+                pos += (size_t)written;
 
-            snprintf(text + strlen(text), textlength - strlen(text), " ");
+            written = snprintf(text + pos, textlength - pos, " ");
+            if (written > 0)
+                pos += (size_t)written;
         }
 
-        if ((flags & DLT_HEADER_SHOW_NOARG) == DLT_HEADER_SHOW_NOARG)
+        if ((flags & DLT_HEADER_SHOW_NOARG) == DLT_HEADER_SHOW_NOARG) {
             /* print number of arguments */
-            snprintf(text + strlen(text), textlength - strlen(text), "%d", msg->extendedheader->noar);
+            written = snprintf(text + pos, textlength - pos, "%d", msg->extendedheader->noar);
+            if (written > 0)
+                pos += (size_t)written;
+        }
     }
     else {
-        if ((flags & DLT_HEADER_SHOW_MSGTYPE) == DLT_HEADER_SHOW_MSGTYPE)
-            snprintf(text + strlen(text), textlength - strlen(text), "--- ");
+        if ((flags & DLT_HEADER_SHOW_MSGTYPE) == DLT_HEADER_SHOW_MSGTYPE) {
+            written = snprintf(text + pos, textlength - pos, "--- ");
+            if (written > 0)
+                pos += (size_t)written;
+        }
 
-        if ((flags & DLT_HEADER_SHOW_MSGSUBTYPE) == DLT_HEADER_SHOW_MSGSUBTYPE)
-            snprintf(text + strlen(text), textlength - strlen(text), "--- ");
+        if ((flags & DLT_HEADER_SHOW_MSGSUBTYPE) == DLT_HEADER_SHOW_MSGSUBTYPE) {
+            written = snprintf(text + pos, textlength - pos, "--- ");
+            if (written > 0)
+                pos += (size_t)written;
+        }
 
-        if ((flags & DLT_HEADER_SHOW_VNVSTATUS) == DLT_HEADER_SHOW_VNVSTATUS)
-            snprintf(text + strlen(text), textlength - strlen(text), "N ");
+        if ((flags & DLT_HEADER_SHOW_VNVSTATUS) == DLT_HEADER_SHOW_VNVSTATUS) {
+            written = snprintf(text + pos, textlength - pos, "N ");
+            if (written > 0)
+                pos += (size_t)written;
+        }
 
-        if ((flags & DLT_HEADER_SHOW_NOARG) == DLT_HEADER_SHOW_NOARG)
-            snprintf(text + strlen(text), textlength - strlen(text), "-");
+        if ((flags & DLT_HEADER_SHOW_NOARG) == DLT_HEADER_SHOW_NOARG) {
+            written = snprintf(text + pos, textlength - pos, "-");
+            if (written > 0)
+                pos += (size_t)written;
+        }
     }
 
     return DLT_RETURN_OK;
@@ -828,6 +891,8 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
     int num;
     uint32_t type_info = 0, type_info_tmp = 0;
     int text_offset = 0;
+    size_t pos = 0;  /* Track current position to avoid repeated strlen calls */
+    int written;
 
     PRINT_FUNCTION_VERBOSE(verbose);
 
@@ -878,17 +943,28 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
 
         /* process message id / service id */
         if (DLT_MSG_IS_CONTROL(msg)) {
-            if ((id > 0) && (id < DLT_SERVICE_ID_LAST_ENTRY))
-                snprintf(text + strlen(text), textlength - strlen(text), "%s",
+            if ((id > 0) && (id < DLT_SERVICE_ID_LAST_ENTRY)) {
+                written = snprintf(text + pos, textlength - pos, "%s",
                          service_id_name[id]); /* service id */
-            else if (!(DLT_MSG_IS_CONTROL_TIME(msg)))
-                snprintf(text + strlen(text), textlength - strlen(text), "service(%u)", id); /* service id */
+                if (written > 0)
+                    pos += (size_t)written;
+            }
+            else if (!(DLT_MSG_IS_CONTROL_TIME(msg))) {
+                written = snprintf(text + pos, textlength - pos, "service(%u)", id); /* service id */
+                if (written > 0)
+                    pos += (size_t)written;
+            }
 
-            if (datalength > 0)
-                snprintf(text + strlen(text), textlength - strlen(text), ", ");
+            if (datalength > 0) {
+                written = snprintf(text + pos, textlength - pos, ", ");
+                if (written > 0)
+                    pos += (size_t)written;
+            }
         }
         else {
-            snprintf(text + strlen(text), textlength - strlen(text), "%u, ", id); /* message id */
+            written = snprintf(text + pos, textlength - pos, "%u, ", id); /* message id */
+            if (written > 0)
+                pos += (size_t)written;
         }
 
         /* process return value */
@@ -896,30 +972,44 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
             if (datalength > 0) {
                 DLT_MSG_READ_VALUE(retval, ptr, datalength, uint8_t); /* No endian conversion necessary */
 
-                if ((retval < DLT_SERVICE_RESPONSE_LAST) || (retval == 8))
-                    snprintf(text + strlen(text), textlength - strlen(text), "%s", return_type[retval]);
-                else
-                    snprintf(text + strlen(text), textlength - strlen(text), "%.2x", retval);
+                if ((retval < DLT_SERVICE_RESPONSE_LAST) || (retval == 8)) {
+                    written = snprintf(text + pos, textlength - pos, "%s", return_type[retval]);
+                    if (written > 0)
+                        pos += (size_t)written;
+                }
+                else {
+                    written = snprintf(text + pos, textlength - pos, "%.2x", retval);
+                    if (written > 0)
+                        pos += (size_t)written;
+                }
 
-                if (datalength >= 1)
-                    snprintf(text + strlen(text), textlength - strlen(text), ", ");
+                if (datalength >= 1) {
+                    written = snprintf(text + pos, textlength - pos, ", ");
+                    if (written > 0)
+                        pos += (size_t)written;
+                }
             }
         }
 
         if (type == DLT_OUTPUT_ASCII_LIMITED) {
-            ret = dlt_print_hex_string(text + strlen(text),
-                                       (int)(textlength - strlen(
-                                                 text)),
+            ret = dlt_print_hex_string(text + pos,
+                                       (int)(textlength - pos),
                                        ptr,
                                        (datalength >
                                         DLT_COMMON_ASCII_LIMIT_MAX_CHARS ? DLT_COMMON_ASCII_LIMIT_MAX_CHARS : datalength));
 
+            if (ret > 0)
+                pos += (size_t)ret;
+
             if ((datalength > DLT_COMMON_ASCII_LIMIT_MAX_CHARS) &&
-                ((textlength - strlen(text)) > 4))
-                snprintf(text + strlen(text), textlength - strlen(text), " ...");
+                ((textlength - pos) > 4)) {
+                written = snprintf(text + pos, textlength - pos, " ...");
+                if (written > 0)
+                    pos += (size_t)written;
+            }
         }
         else {
-            ret = dlt_print_hex_string(text + strlen(text), (int)(textlength - strlen(text)), ptr, datalength);
+            ret = dlt_print_hex_string(text + pos, (int)(textlength - pos), ptr, datalength);
         }
 
         return ret;
@@ -933,8 +1023,10 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
 
     for (num = 0; num < (int)(msg->extendedheader->noar); num++) {
         if (num != 0) {
-            text_offset = (int)strlen(text);
-            snprintf(text + text_offset, textlength - (size_t)text_offset, " ");
+            text_offset = (int)pos;
+            written = snprintf(text + text_offset, textlength - (size_t)text_offset, " ");
+            if (written > 0)
+                pos += (size_t)written;
         }
 
         /* first read the type info of the argument */
@@ -942,12 +1034,15 @@ DltReturnValue dlt_message_payload(DltMessage *msg, char *text, size_t textlengt
         type_info = DLT_ENDIAN_GET_32(msg->standardheader->htyp, type_info_tmp);
 
         /* print out argument */
-        text_offset = (int)strlen(text);
+        text_offset = (int)pos;
 
         if (dlt_message_argument_print(msg, type_info, pptr, pdatalength,
                                        (text + text_offset), (textlength - (size_t)text_offset), -1,
                                        0) == DLT_RETURN_ERROR)
             return DLT_RETURN_ERROR;
+        
+        /* Update position after argument print */
+        pos = (size_t)strlen(text);
     }
 
     return DLT_RETURN_OK;
