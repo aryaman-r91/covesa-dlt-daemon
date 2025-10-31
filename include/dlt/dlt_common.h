@@ -91,9 +91,13 @@
 #   if defined(__GNUC__)
 #      define PURE_FUNCTION __attribute__((pure))
 #      define PRINTF_FORMAT(a,b) __attribute__ ((format (printf, a, b)))
+#      define DLT_LIKELY(x) __builtin_expect(!!(x), 1)
+#      define DLT_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #   else
 #      define PURE_FUNCTION /* nothing */
 #      define PRINTF_FORMAT(a,b) /* nothing */
+#      define DLT_LIKELY(x) (x)
+#      define DLT_UNLIKELY(x) (x)
 #   endif
 
 #   if !defined (__WIN32__) && !defined(_MSC_VER)
