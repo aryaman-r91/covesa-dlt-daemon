@@ -1844,13 +1844,7 @@ DltReturnValue dlt_user_log_write_start_internal(DltContext *handle,
     ret = dlt_user_log_write_start_init(handle, log, loglevel, is_verbose);
     if (DLT_LIKELY(ret == DLT_RETURN_TRUE)) {
         /* initialize values */
-        if ((NULL != log->buffer))
-        {
-            free(log->buffer);
-            log->buffer = NULL;
-        }
-        else
-        {
+        if (log->buffer == NULL) {
             log->buffer = calloc(sizeof(unsigned char), dlt_user.log_buf_len);
             
             if (log->buffer == NULL) {
@@ -1859,16 +1853,10 @@ DltReturnValue dlt_user_log_write_start_internal(DltContext *handle,
             }
         }
 
-        if (DLT_UNLIKELY(log->buffer == NULL)) {
-            dlt_vlog(LOG_ERR, "Cannot allocate buffer for DLT Log message\n");
-            return DLT_RETURN_ERROR;
-        }
-        else
-        {
-            /* In non-verbose mode, insert message id */
-            if (!is_verbose_mode(dlt_user.verbose_mode, log)) {
-                if (DLT_UNLIKELY((sizeof(uint32_t)) > dlt_user.log_buf_len))
-                    return DLT_RETURN_USER_BUFFER_FULL;
+        /* In non-verbose mode, insert message id */
+        if (!is_verbose_mode(dlt_user.verbose_mode, log)) {
+            if (DLT_UNLIKELY((sizeof(uint32_t)) > dlt_user.log_buf_len))
+                return DLT_RETURN_USER_BUFFER_FULL;
 
             /* Write message id */
             memcpy(log->buffer, &(messageid), sizeof(uint32_t));
