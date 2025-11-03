@@ -1193,25 +1193,17 @@ int dlt_message_read(DltMessage *msg, uint8_t *buffer, unsigned int length, int 
         /* dlt_log(LOG_ERR,"length does not fit!\n"); */
         return DLT_MESSAGE_ERROR_SIZE;
 
-    /* free last used memory for buffer */
-    if (msg->databuffer) {
-        if (msg->datasize > msg->databuffersize) {
-            free(msg->databuffer);
-            msg->databuffer = (uint8_t *)malloc(msg->datasize);
-            msg->databuffersize = msg->datasize;
+    /* reuse or reallocate buffer if needed */
+    if (msg->datasize > msg->databuffersize) {
+        uint8_t *new_databuffer = (uint8_t *)realloc(msg->databuffer, msg->datasize);
+        if (new_databuffer == NULL) {
+            dlt_vlog(LOG_WARNING,
+                     "Cannot allocate memory for payload buffer of size %u!\n",
+                     msg->datasize);
+            return DLT_MESSAGE_ERROR_UNKNOWN;
         }
-    }
-    else {
-        /* get new memory for buffer */
-        msg->databuffer = (uint8_t *)malloc(msg->datasize);
+        msg->databuffer = new_databuffer;
         msg->databuffersize = msg->datasize;
-    }
-
-    if (msg->databuffer == NULL) {
-        dlt_vlog(LOG_WARNING,
-                 "Cannot allocate memory for payload buffer of size %u!\n",
-                 msg->datasize);
-        return DLT_MESSAGE_ERROR_UNKNOWN;
     }
 
     /* load payload data from buffer */
