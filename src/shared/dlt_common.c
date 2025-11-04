@@ -3745,14 +3745,15 @@ DltReturnValue dlt_message_argument_print(DltMessage *msg,
             if ((*datalength) < 0)
                 return DLT_RETURN_ERROR;
 
-            snprintf(value_text, textlength, "0x%08x", value32u);
+            int len = snprintf(value_text, textlength, "0x%08x", value32u);
             *ptr -= 8;
             DLT_MSG_READ_VALUE(value32u, *ptr, *datalength, uint32_t);
 
             if ((*datalength) < 0)
                 return DLT_RETURN_ERROR;
 
-            snprintf(value_text + strlen(value_text), textlength - strlen(value_text), "%08x", value32u);
+            if (len > 0 && (size_t)len < textlength)
+                snprintf(value_text + len, textlength - len, "%08x", value32u);
             *ptr += 4;
         }
     }
